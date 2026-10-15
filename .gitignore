@@ -1,0 +1,8 @@
+.DS_Store
+
+# Локальные черновики, рабочие файлы и материалы преподавателя
+/draft/
+/reference/
+/work/
+/scripts/
+/latex-template/
