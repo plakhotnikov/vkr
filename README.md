@@ -6,7 +6,7 @@
 
 ## Материалы
 
-- [Заметки по концепции](vkr_concept_notes.md).
+- [Заметки по концепции](vkr_concept_notes.md): источники данных, стратегии, оценка, sequence и C4-схемы.
 - [Проект задания на ВКР](docs/vkr_assignment_draft.pdf).
 - [Исходники задания в LaTeX](docs/vkr_latex_source.zip).
 

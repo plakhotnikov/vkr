@@ -99,3 +99,68 @@ sequenceDiagram
 Приложение проверяет, существуют ли записи, на которые ссылается модель. Причину и рекомендации оценивает инженер по описанию сбоя и собранным данным. Шкалу нужно согласовать до эксперимента. Рекомендации на стенде не выполняются.
 
 Обе стратегии проверяются на одинаковых инцидентах, с одной моделью, её настройками и доступом к одним источникам. Каждый запуск повторяется несколько раз. Для настройки и итоговой проверки используются разные сценарии. Модель получает телеметрию без описания внесённой неисправности.
+
+## 6. Архитектура
+
+### C4: контекст системы
+
+```mermaid
+flowchart TB
+    engineer["Инженер<br/>[Человек]<br/>Настройка и оценка диагностики"]
+    platform["Платформа анализа инцидентов<br/>[Программная система]<br/>Расследование, гипотезы, рекомендации"]
+    monitoring["Стек наблюдаемости<br/>[Внешняя система]<br/>Alertmanager, Prometheus, Loki, Tempo"]
+    kubernetes["Kubernetes API<br/>[Внешняя система]<br/>Сервисы и их экземпляры"]
+    llm["LLM API<br/>[Внешняя система]<br/>Анализ контекста и выбор инструментов"]
+
+    engineer -->|Настройки, просмотр, оценка| platform
+    monitoring -->|Алерты| platform
+    platform -->|Запрос телеметрии| monitoring
+    platform -->|Запрос состава сервисов| kubernetes
+    platform -->|Контекст и результаты инструментов| llm
+
+    classDef person fill:#08427b,color:#fff,stroke:#052e56
+    classDef system fill:#1168bd,color:#fff,stroke:#08427b
+    classDef external fill:#686868,color:#fff,stroke:#484848
+    class engineer person
+    class platform system
+    class monitoring,kubernetes,llm external
+```
+
+### C4: контейнеры
+
+Вариант с отдельным MCP-сервером. Веб-интерфейс входит в приложение; провайдеры входят в MCP-сервер.
+
+```mermaid
+flowchart TB
+    engineer["Инженер<br/>[Человек]"]
+    alerts["Alertmanager<br/>[Внешняя система]"]
+    llm["LLM API<br/>[Внешняя система]"]
+
+    subgraph platform["Платформа анализа инцидентов"]
+        app["Веб-приложение<br/>[Контейнер: Java/Kotlin, Spring]<br/>Интерфейс, стратегии, лимиты, MCP-клиент"]
+        db[("База данных<br/>[Контейнер: PostgreSQL]<br/>Инциденты, данные запусков, оценки")]
+        mcp["MCP-сервер<br/>[Контейнер: Java/Kotlin, Spring]<br/>Инструменты, провайдеры, нормализация"]
+    end
+
+    telemetry["Prometheus, Loki, Tempo<br/>[Внешние системы]<br/>Метрики, логи, трассировки"]
+    kubernetes["Kubernetes API<br/>[Внешняя система]<br/>Состав сервисов"]
+
+    engineer -->|Настройка и работа с инцидентами: HTTPS| app
+    alerts -->|Уведомления: HTTP webhook| app
+    app -->|Контекст и результаты инструментов: HTTPS| llm
+    app -->|Чтение и запись: SQL| db
+    app -->|Вызов инструментов: MCP по HTTP| mcp
+    mcp -->|Запрос данных: HTTP API| telemetry
+    mcp -->|Запрос сервисов: HTTPS API| kubernetes
+
+    classDef person fill:#08427b,color:#fff,stroke:#052e56
+    classDef container fill:#438dd5,color:#fff,stroke:#1168bd
+    classDef external fill:#686868,color:#fff,stroke:#484848
+    class engineer person
+    class app,db,mcp container
+    class alerts,llm,telemetry,kubernetes external
+```
+
+LLM возвращает запрос инструмента приложению. Приложение вызывает MCP-сервер и передаёт результат обратно модели. Доступ к Loki, Prometheus, Tempo и Kubernetes находится у провайдеров.
+
+`LogsProvider` и `LokiLogsProvider` являются внутренними модулями MCP-сервера. Замена реализации или добавление подключения не меняют алгоритм расследования.
